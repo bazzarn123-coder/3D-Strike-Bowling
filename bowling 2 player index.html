@@ -1,0 +1,1612 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>3D 10-Pin Bowling - Multi-Mode</title>
+    <!-- Tailwind CSS for modern UI overlay -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;800;900&family=Teko:wght@600;700&display=swap" rel="stylesheet">
+    
+    <!-- Three.js Library -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <!-- Cannon.js Physics Engine -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/cannon.js/0.6.2/cannon.min.js"></script>
+    <!-- PeerJS for Online Multiplayer -->
+    <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
+
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            font-family: 'Outfit', sans-serif;
+            background-color: #0b0f19;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        canvas {
+            display: block;
+            width: 100vw;
+            height: 100vh;
+        }
+        .scoreboard-font {
+            font-family: 'Teko', sans-serif;
+        }
+        /* Glassmorphism custom styling */
+        .glass-panel {
+            background: rgba(15, 23, 42, 0.85);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .glass-btn {
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            transition: all 0.2s ease;
+        }
+        .glass-btn:hover {
+            background: rgba(255, 255, 255, 0.2);
+            border-color: rgba(255, 255, 255, 0.3);
+            transform: translateY(-2px);
+        }
+        .glass-btn:active {
+            transform: translateY(0);
+        }
+        /* Safe area bottom padding for mobile navigation bars */
+        .safe-bottom-container {
+            padding-bottom: max(1.5rem, env(safe-area-inset-bottom));
+        }
+        /* Custom scrollbar for scoreboard */
+        ::-webkit-scrollbar {
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(0,0,0,0.2);
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(255,255,255,0.2);
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(255,255,255,0.4);
+        }
+    </style>
+</head>
+<body class="text-white">
+
+    <!-- Canvas Container -->
+    <div id="canvas-container" class="absolute inset-0"></div>
+
+    <!-- Mode Selection Modal (Startup) -->
+    <div id="modal-mode-select" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-md">
+        <div class="glass-panel max-w-lg w-full rounded-3xl p-8 text-center shadow-2xl border border-amber-500/30">
+            <div class="w-16 h-16 bg-gradient-to-tr from-amber-500 to-red-600 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg shadow-amber-500/30 text-3xl">
+                🎳
+            </div>
+            <h2 class="scoreboard-font text-5xl font-extrabold text-amber-400 mb-1">3D STRIKE BOWLING</h2>
+            <p class="text-sm text-slate-300 mb-6 font-medium">Select Game Mode</p>
+
+            <div class="space-y-3">
+                <button id="btn-mode-solo" class="w-full py-4 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 font-black rounded-2xl text-base tracking-wider uppercase shadow-lg shadow-amber-500/20 transition-transform active:scale-98 flex items-center justify-center gap-2">
+                    <i class="fa-solid fa-user"></i> 1-Player Solo Practice
+                </button>
+                <button id="btn-mode-local" class="w-full py-4 bg-slate-800 hover:bg-slate-700 text-slate-100 font-bold rounded-2xl text-base tracking-wider uppercase border border-slate-700 transition-transform active:scale-98 flex items-center justify-center gap-2">
+                    <i class="fa-solid fa-user-group text-amber-400"></i> 2-Player Local (Pass & Play)
+                </button>
+                <button id="btn-mode-online" class="w-full py-4 bg-slate-800 hover:bg-slate-700 text-slate-100 font-bold rounded-2xl text-base tracking-wider uppercase border border-slate-700 transition-transform active:scale-98 flex items-center justify-center gap-2">
+                    <i class="fa-solid fa-globe text-teal-400"></i> 2-Player Online Match
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Online Lobby Modal -->
+    <div id="modal-online-lobby" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-md opacity-0 pointer-events-none transition-opacity duration-300">
+        <div class="glass-panel max-w-md w-full rounded-3xl p-6 text-center shadow-2xl border border-teal-500/30">
+            <h2 class="scoreboard-font text-4xl font-extrabold text-teal-400 mb-2">ONLINE MULTIPLAYER</h2>
+            <p class="text-xs text-slate-300 mb-6">Play with a friend over the internet using PeerJS.</p>
+
+            <div class="space-y-4 mb-6">
+                <div class="bg-slate-900/80 p-4 rounded-2xl border border-slate-800">
+                    <span class="text-xs text-slate-400 uppercase font-bold block mb-1">Your Room ID</span>
+                    <div class="flex items-center justify-center gap-2">
+                        <span id="online-my-id" class="font-mono text-amber-400 font-bold text-lg select-all">Generating...</span>
+                        <button id="btn-copy-id" class="glass-btn px-3 py-1.5 rounded-xl text-xs font-semibold"><i class="fa-solid fa-copy"></i></button>
+                    </div>
+                </div>
+
+                <div class="text-xs text-slate-500 font-bold uppercase tracking-wider">— OR JOIN FRIEND —</div>
+
+                <div class="flex gap-2">
+                    <input id="input-peer-id" type="text" placeholder="Enter Friend's Room ID" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-xs font-mono text-slate-200 focus:outline-none focus:border-teal-400">
+                    <button id="btn-connect-peer" class="px-5 bg-teal-500 hover:bg-teal-400 text-slate-950 font-extrabold rounded-xl text-xs uppercase tracking-wider transition-all">Join</button>
+                </div>
+            </div>
+
+            <div id="online-status-msg" class="text-xs font-semibold text-amber-300 mb-4 animate-pulse">Waiting for connection...</div>
+
+            <button id="btn-cancel-online" class="w-full py-3 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-xl text-xs uppercase tracking-wider">Back to Menu</button>
+        </div>
+    </div>
+
+    <!-- UI Overlay Layer -->
+    <div class="relative z-10 flex flex-col justify-between h-screen p-3 pt-3 safe-bottom-container pointer-events-none box-border">
+        
+        <!-- Header & Scoreboard Section -->
+        <header class="w-full max-w-6xl mx-auto pointer-events-auto">
+            <div class="glass-panel rounded-2xl p-2.5 shadow-2xl">
+                <div class="flex items-center justify-between mb-2 gap-2">
+                    
+                    <!-- Left Column: Icon + Title + Description -->
+                    <div class="flex items-center gap-2.5 min-w-0">
+                        <div class="bg-gradient-to-tr from-amber-500 to-red-600 p-2 rounded-xl shadow-lg shrink-0">
+                            <i class="fa-solid font-bold text-lg">🎳</i>
+                        </div>
+                        <div class="min-w-0">
+                            <h1 class="font-black text-base sm:text-lg tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-amber-200 via-amber-400 to-red-400 truncate">3D STRIKE BOWL</h1>
+                            <p id="game-status-text" class="text-[10px] text-amber-200/80 font-bold tracking-wide uppercase truncate">SOLO PLAYER • FRAME 1 • ROLL 1</p>
+                        </div>
+                    </div>
+
+                    <!-- Active Turn Indicator for Multiplayer -->
+                    <div id="turn-indicator-panel" class="hidden glass-panel px-3 py-1 rounded-xl border border-amber-500/40 text-center shadow-md shrink-0">
+                        <span class="text-[9px] uppercase font-bold text-slate-400 block leading-none">Current Turn</span>
+                        <span id="active-player-name" class="scoreboard-font text-lg font-black text-amber-400 leading-none">Player 1</span>
+                    </div>
+
+                    <!-- Top Controls & Total Score -->
+                    <div class="flex items-center gap-2.5 shrink-0">
+                        <div class="text-right">
+                            <span class="text-[10px] text-slate-400 uppercase tracking-widest block font-bold leading-none">Score</span>
+                            <span id="total-score-display" class="scoreboard-font text-3xl leading-none font-bold text-amber-400">0</span>
+                        </div>
+
+                        <div class="flex gap-1.5">
+                            <button id="btn-camera-toggle" class="glass-btn p-2 rounded-xl text-xs font-semibold flex items-center justify-center" title="Switch View">
+                                <i class="fa-solid fa-video text-amber-400"></i>
+                            </button>
+                            <button id="btn-audio-toggle" class="glass-btn p-2 rounded-xl text-xs font-semibold flex items-center justify-center" title="Toggle Sound">
+                                <i id="audio-icon" class="fa-solid fa-volume-high text-amber-400"></i>
+                            </button>
+                            <button id="btn-restart" class="glass-btn p-2 rounded-xl text-xs font-semibold flex items-center justify-center hover:text-red-400" title="Restart Game">
+                                <i class="fa-solid fa-rotate-right"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 10 Frames Scoreboard Grid -->
+                <div class="overflow-x-auto pb-1">
+                    <div id="scoreboard-frames" class="grid grid-cols-10 gap-1 min-w-[650px]">
+                        <!-- Dynamically Generated by JavaScript -->
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Dynamic Game Center Banner (Strikes, Spares, Messages) -->
+        <div id="banner-container" class="self-center my-auto transition-all duration-500 transform scale-0 opacity-0 pointer-events-none">
+            <div id="banner-card" class="glass-panel px-8 py-4 rounded-3xl border-2 border-amber-500/50 text-center shadow-2xl">
+                <h2 id="banner-title" class="scoreboard-font text-6xl md:text-8xl font-black italic tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-yellow-300 via-amber-400 to-orange-500 drop-shadow-lg">STRIKE!</h2>
+                <p id="banner-subtitle" class="text-sm font-semibold tracking-widest text-slate-300 uppercase">Awesome Throw!</p>
+            </div>
+        </div>
+
+        <!-- Bottom Controls & Interaction Dock -->
+        <footer class="w-full max-w-xl mx-auto pointer-events-auto mb-2">
+            <div id="controls-panel" class="glass-panel rounded-3xl p-4 shadow-2xl transition-all duration-300">
+                
+                <!-- Step 1: Position Ball & Aim -->
+                <div id="step-aim" class="space-y-3">
+                    <div class="flex justify-between items-center text-xs font-semibold text-slate-300 px-1">
+                        <span class="flex items-center gap-1.5"><i class="fa-solid fa-arrows-left-right text-amber-400"></i> Position & Aim</span>
+                        <span id="aim-angle-text" class="text-amber-400 font-mono">0.0°</span>
+                    </div>
+
+                    <!-- Horizontal Slider for Ball Position -->
+                    <div class="space-y-0.5">
+                        <div class="flex justify-between text-[10px] text-slate-400 uppercase tracking-wider font-bold">
+                            <span>Left</span>
+                            <span>Lane Position</span>
+                            <span>Right</span>
+                        </div>
+                        <input id="slider-position" type="range" min="-0.75" max="0.75" step="0.01" value="0" 
+                               class="w-full h-2 bg-slate-700/80 rounded-lg appearance-none cursor-pointer accent-amber-400">
+                    </div>
+
+                    <!-- Horizontal Slider for Aim Angle -->
+                    <div class="space-y-0.5">
+                        <div class="flex justify-between text-[10px] text-slate-400 uppercase tracking-wider font-bold">
+                            <span>Left Angle</span>
+                            <span>Aim Direction</span>
+                            <span>Right Angle</span>
+                        </div>
+                        <input id="slider-aim" type="range" min="-5" max="5" step="0.1" value="0" 
+                               class="w-full h-2 bg-slate-700/80 rounded-lg appearance-none cursor-pointer accent-amber-400">
+                    </div>
+
+                    <!-- Spin (Hook) Adjustment -->
+                    <div class="space-y-0.5">
+                        <div class="flex justify-between text-[10px] text-slate-400 uppercase tracking-wider font-bold">
+                            <span>Hook Left</span>
+                            <span>Ball Spin (Hook)</span>
+                            <span>Hook Right</span>
+                        </div>
+                        <input id="slider-spin" type="range" min="-10" max="10" step="0.5" value="0" 
+                               class="w-full h-2 bg-slate-700/80 rounded-lg appearance-none cursor-pointer accent-amber-400">
+                    </div>
+
+                    <button id="btn-next-power" class="w-full py-3 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 font-extrabold rounded-2xl shadow-lg shadow-amber-500/20 text-xs tracking-wider uppercase transition-all duration-200 transform active:scale-98">
+                        Set Power & Roll <i class="fa-solid fa-arrow-right ml-1"></i>
+                    </button>
+                </div>
+
+                <!-- Step 2: Power Meter & Throw -->
+                <div id="step-power" class="hidden space-y-3">
+                    <div class="flex justify-between items-center text-xs font-semibold text-slate-300 px-1">
+                        <span class="flex items-center gap-1.5"><i class="fa-solid fa-bolt text-amber-400"></i> Throw Power</span>
+                        <span id="power-percent-text" class="text-amber-400 font-mono font-bold text-base">0%</span>
+                    </div>
+
+                    <!-- Animated Oscillating Power Bar -->
+                    <div class="relative w-full h-5 bg-slate-800/90 rounded-xl overflow-hidden border border-slate-700 p-0.5">
+                        <div id="power-bar-fill" class="h-full w-0 bg-gradient-to-r from-emerald-400 via-amber-400 to-red-500 rounded-lg transition-all duration-75"></div>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-2.5 pt-1">
+                        <button id="btn-back-aim" class="py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-xl text-xs uppercase tracking-wider transition-colors">
+                            <i class="fa-solid fa-arrow-left mr-1"></i> Adjust Aim
+                        </button>
+                        <button id="btn-release-ball" class="py-2.5 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-black rounded-xl text-xs uppercase tracking-wider shadow-lg shadow-emerald-500/20 transition-transform active:scale-95">
+                            RELEASE BALL! 🎳
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Active Roll In-Progress View -->
+                <div id="step-rolling" class="hidden text-center py-2 space-y-2">
+                    <div class="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-300 text-xs font-semibold animate-pulse">
+                        <i class="fa-solid fa-circle-notch fa-spin"></i> Ball rolling... Watch the pin deck!
+                    </div>
+                </div>
+
+            </div>
+        </footer>
+
+    </div>
+
+    <!-- Game Over Modal -->
+    <div id="modal-gameover" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md transition-opacity duration-300 opacity-0 pointer-events-none">
+        <div class="glass-panel max-w-md w-full rounded-3xl p-6 text-center shadow-2xl border border-amber-500/30 transform scale-95 transition-transform duration-300">
+            <div class="w-16 h-16 bg-gradient-to-tr from-amber-500 to-red-500 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg shadow-amber-500/30">
+                <i class="fa-solid fa-trophy text-3xl text-slate-950"></i>
+            </div>
+            <h2 class="scoreboard-font text-5xl font-extrabold text-amber-400 mb-1">GAME COMPLETED!</h2>
+            <p id="gameover-winner-text" class="text-sm text-slate-300 mb-6 font-medium">Final Performance Summary</p>
+
+            <div class="bg-slate-900/60 rounded-2xl p-4 border border-slate-800 mb-6 space-y-2">
+                <div id="gameover-scores-list" class="space-y-1 text-left text-xs">
+                    <!-- Populated dynamically -->
+                </div>
+            </div>
+
+            <button id="btn-play-again" class="w-full py-4 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 font-black rounded-2xl text-base tracking-wider uppercase shadow-lg shadow-amber-500/20 transition-transform active:scale-98">
+                Main Menu <i class="fa-solid fa-rotate-right ml-1"></i>
+            </button>
+        </div>
+    </div>
+
+    <!-- MAIN GAME LOGIC SCRIPT -->
+    <script>
+        /**
+         * 1. AUDIO SYNTHESIZER (Web Audio API)
+         */
+        class SoundEngine {
+            constructor() {
+                this.ctx = null;
+                this.muted = false;
+            }
+
+            init() {
+                if (!this.ctx) {
+                    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+                    this.ctx = new AudioCtx();
+                }
+                if (this.ctx.state === 'suspended') {
+                    this.ctx.resume();
+                }
+            }
+
+            playRoll() {
+                if (this.muted) return null;
+                this.init();
+                
+                const bufferSize = this.ctx.sampleRate * 2;
+                const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+                const data = buffer.getChannelData(0);
+                for (let i = 0; i < bufferSize; i++) {
+                    data[i] = Math.random() * 2 - 1;
+                }
+
+                const noise = this.ctx.createBufferSource();
+                noise.buffer = buffer;
+                noise.loop = true;
+
+                const filter = this.ctx.createBiquadFilter();
+                filter.type = 'lowpass';
+                filter.frequency.setValueAtTime(160, this.ctx.currentTime);
+
+                const gain = this.ctx.createGain();
+                gain.gain.setValueAtTime(0.01, this.ctx.currentTime);
+                gain.gain.linearRampToValueAtTime(0.15, this.ctx.currentTime + 0.3);
+
+                noise.connect(filter);
+                filter.connect(gain);
+                gain.connect(this.ctx.destination);
+
+                noise.start();
+                return { noise, gain };
+            }
+
+            playPinImpact(volume = 1.0) {
+                if (this.muted) return;
+                this.init();
+
+                const now = this.ctx.currentTime;
+                const count = 3 + Math.floor(Math.random() * 3);
+
+                for (let i = 0; i < count; i++) {
+                    const osc = this.ctx.createOscillator();
+                    const gain = this.ctx.createGain();
+
+                    osc.type = 'triangle';
+                    const freq = 350 + Math.random() * 450;
+                    osc.frequency.setValueAtTime(freq, now + i * 0.015);
+                    osc.frequency.exponentialRampToValueAtTime(120, now + i * 0.015 + 0.08);
+
+                    const vol = Math.min(0.4, (0.15 + Math.random() * 0.2) * volume);
+                    gain.gain.setValueAtTime(vol, now + i * 0.015);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.015 + 0.12);
+
+                    osc.connect(gain);
+                    gain.connect(this.ctx.destination);
+
+                    osc.start(now + i * 0.015);
+                    osc.stop(now + i * 0.015 + 0.13);
+                }
+            }
+
+            playGutter() {
+                if (this.muted) return;
+                this.init();
+                const now = this.ctx.currentTime;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(120, now);
+                osc.frequency.exponentialRampToValueAtTime(40, now + 0.25);
+
+                gain.gain.setValueAtTime(0.3, now);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
+
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+
+                osc.start(now);
+                osc.stop(now + 0.26);
+            }
+
+            playStrikeFanfare() {
+                if (this.muted) return;
+                this.init();
+                const notes = [261.63, 329.63, 392.00, 523.25];
+                notes.forEach((freq, idx) => {
+                    const now = this.ctx.currentTime + idx * 0.09;
+                    const osc = this.ctx.createOscillator();
+                    const gain = this.ctx.createGain();
+
+                    osc.type = 'triangle';
+                    osc.frequency.setValueAtTime(freq, now);
+
+                    gain.gain.setValueAtTime(0.2, now);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
+
+                    osc.connect(gain);
+                    gain.connect(this.ctx.destination);
+
+                    osc.start(now);
+                    osc.stop(now + 0.31);
+                });
+            }
+
+            playMechanicalRack() {
+                if (this.muted) return;
+                this.init();
+                const now = this.ctx.currentTime;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(80, now);
+                osc.frequency.linearRampToValueAtTime(120, now + 0.5);
+
+                gain.gain.setValueAtTime(0.1, now);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.6);
+
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+
+                osc.start(now);
+                osc.stop(now + 0.61);
+            }
+        }
+
+        const sound = new SoundEngine();
+
+        /**
+         * 2. OFFICIAL 10-PIN BOWLING SCOREBOARD MANAGER
+         */
+        class BowlingScoreboard {
+            constructor() {
+                this.reset();
+            }
+
+            reset() {
+                this.frames = Array.from({ length: 10 }, () => ({
+                    rolls: [],
+                    score: null,
+                    isComplete: false
+                }));
+                this.currentFrameIndex = 0;
+                this.currentRollIndex = 0;
+                this.totalScore = 0;
+                this.strikesCount = 0;
+                this.sparesCount = 0;
+            }
+
+            recordRoll(pinsKnocked) {
+                const frame = this.frames[this.currentFrameIndex];
+                frame.rolls.push(pinsKnocked);
+
+                if (this.currentFrameIndex < 9) {
+                    if (frame.rolls.length === 1 && pinsKnocked === 10) {
+                        this.strikesCount++;
+                        frame.isComplete = true;
+                    } else if (frame.rolls.length === 2) {
+                        if (frame.rolls[0] + frame.rolls[1] === 10) {
+                            this.sparesCount++;
+                        }
+                        frame.isComplete = true;
+                    }
+                } else {
+                    const sumFirstTwo = (frame.rolls[0] || 0) + (frame.rolls[1] || 0);
+                    if (frame.rolls.length === 1 && pinsKnocked === 10) this.strikesCount++;
+                    if (frame.rolls.length === 2) {
+                        if (frame.rolls[1] === 10) this.strikesCount++;
+                        if (frame.rolls[0] < 10 && sumFirstTwo === 10) this.sparesCount++;
+                    }
+                    if (frame.rolls.length === 3) {
+                        if (frame.rolls[2] === 10) this.strikesCount++;
+                    }
+
+                    if (frame.rolls.length === 2 && sumFirstTwo < 10) {
+                        frame.isComplete = true;
+                    } else if (frame.rolls.length === 3) {
+                        frame.isComplete = true;
+                    }
+                }
+
+                this.calculateScores();
+
+                if (frame.isComplete) {
+                    if (this.currentFrameIndex < 9) {
+                        this.currentFrameIndex++;
+                        this.currentRollIndex = 0;
+                    }
+                } else {
+                    this.currentRollIndex++;
+                }
+            }
+
+            calculateScores() {
+                let cumulativeScore = 0;
+
+                for (let i = 0; i < 10; i++) {
+                    const frame = this.frames[i];
+                    const r = frame.rolls;
+
+                    if (i < 9) {
+                        if (r.length > 0) {
+                            if (r[0] === 10) {
+                                const nextTwo = this.getNextRolls(i, 2);
+                                if (nextTwo.length === 2) {
+                                    cumulativeScore += 10 + nextTwo[0] + nextTwo[1];
+                                    frame.score = cumulativeScore;
+                                } else {
+                                    frame.score = null;
+                                }
+                            } else if (r.length === 2) {
+                                if (r[0] + r[1] === 10) {
+                                    const nextOne = this.getNextRolls(i, 1);
+                                    if (nextOne.length === 1) {
+                                        cumulativeScore += 10 + nextOne[0];
+                                        frame.score = cumulativeScore;
+                                    } else {
+                                        frame.score = null;
+                                    }
+                                } else {
+                                    cumulativeScore += r[0] + r[1];
+                                    frame.score = cumulativeScore;
+                                }
+                            }
+                        }
+                    } else {
+                        if (r.length >= 2) {
+                            const sumFirstTwo = r[0] + r[1];
+                            if (sumFirstTwo >= 10) {
+                                if (r.length === 3) {
+                                    cumulativeScore += r[0] + r[1] + r[2];
+                                    frame.score = cumulativeScore;
+                                } else {
+                                    frame.score = null;
+                                }
+                            } else {
+                                cumulativeScore += sumFirstTwo;
+                                frame.score = cumulativeScore;
+                            }
+                        }
+                    }
+                }
+
+                for (let i = 9; i >= 0; i--) {
+                    if (this.frames[i].score !== null) {
+                        this.totalScore = this.frames[i].score;
+                        break;
+                    }
+                }
+            }
+
+            getNextRolls(frameIdx, count) {
+                const rolls = [];
+                for (let i = frameIdx + 1; i < 10; i++) {
+                    for (let r of this.frames[i].rolls) {
+                        rolls.push(r);
+                        if (rolls.length === count) return rolls;
+                    }
+                }
+                return rolls;
+            }
+
+            isGameOver() {
+                return this.frames[9].isComplete;
+            }
+        }
+
+        // Multiplayer state manager
+        let gameMode = 'solo'; // 'solo', 'local', 'online'
+        let activePlayerIndex = 0;
+        let players = [
+            { name: 'Player 1', scoreboard: new BowlingScoreboard() },
+            { name: 'Player 2', scoreboard: new BowlingScoreboard() }
+        ];
+
+        // PeerJS online variables
+        let peer = null;
+        let conn = null;
+        let isOnlineHost = false;
+        let onlinePlayerId = 0;
+
+        function getActiveScoreboard() {
+            return players[activePlayerIndex].scoreboard;
+        }
+
+        /**
+         * 3. 3D GRAPHICS & PHYSICS ENGINE SETUP
+         */
+        const LANE_WIDTH = 1.06;
+        const LANE_LENGTH = 18.28;
+        const PIN_RADIUS = 0.06;
+        const PIN_HEIGHT = 0.38;
+        const RETURN_TRACK_X = 0.8;
+
+        let scene, camera, renderer;
+        let world;
+        let ballMesh, ballBody;
+        let aimArrowMesh;
+        let sweeperMesh;
+        let pins = [];
+        let currentRollSound = null;
+        let cameraMode = 'overview';
+        let isBallReturning = false;
+        let returnStage = 0;
+        let returnTargetX = RETURN_TRACK_X;
+
+        let isSweeperAnimating = false;
+        let sweeperZ = -LANE_LENGTH - 0.5;
+
+        let lanePhysicsMaterial, ballPhysicsMaterial, pinPhysicsMaterial;
+
+        function initEngine() {
+            const container = document.getElementById('canvas-container');
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x0b0f19);
+            scene.fog = new THREE.FogExp2(0x0b0f19, 0.025);
+
+            camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 50);
+            
+            renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            container.appendChild(renderer.domElement);
+
+            world = new CANNON.World();
+            world.gravity.set(0, -9.81, 0);
+            world.broadphase = new CANNON.NaiveBroadphase();
+            world.solver.iterations = 20;
+
+            lanePhysicsMaterial = new CANNON.Material('lane');
+            ballPhysicsMaterial = new CANNON.Material('ball');
+            pinPhysicsMaterial = new CANNON.Material('pin');
+
+            const ballLaneContact = new CANNON.ContactMaterial(ballPhysicsMaterial, lanePhysicsMaterial, {
+                friction: 0.15,
+                restitution: 0.2
+            });
+            world.addContactMaterial(ballLaneContact);
+
+            const pinPinContact = new CANNON.ContactMaterial(pinPhysicsMaterial, pinPhysicsMaterial, {
+                friction: 0.4,
+                restitution: 0.25
+            });
+            world.addContactMaterial(pinPinContact);
+
+            const ballPinContact = new CANNON.ContactMaterial(ballPhysicsMaterial, pinPhysicsMaterial, {
+                friction: 0.3,
+                restitution: 0.35
+            });
+            world.addContactMaterial(ballPinContact);
+
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+            scene.add(ambientLight);
+
+            const laneLight1 = new THREE.SpotLight(0xfff5ea, 1.2, 25, Math.PI / 4, 0.5);
+            laneLight1.position.set(0, 7, 2);
+            laneLight1.target.position.set(0, 0, -5);
+            laneLight1.castShadow = true;
+            scene.add(laneLight1);
+            scene.add(laneLight1.target);
+
+            const pinDeckLight = new THREE.SpotLight(0x38bdf8, 1.8, 15, Math.PI / 3, 0.3);
+            pinDeckLight.position.set(0, 5, -LANE_LENGTH + 2);
+            pinDeckLight.target.position.set(0, 0, -LANE_LENGTH);
+            pinDeckLight.castShadow = true;
+            scene.add(pinDeckLight);
+            scene.add(pinDeckLight.target);
+
+            createBowlingLaneEnvironment();
+            createBall();
+            createAimArrow();
+            createSweeperBar();
+            createPins();
+
+            updateCameraPosition();
+            window.addEventListener('resize', onWindowResize, false);
+        }
+
+        function createWoodTexture() {
+            const canvas = document.createElement('canvas');
+            canvas.width = 512;
+            canvas.height = 2048;
+            const ctx = canvas.getContext('2d');
+
+            ctx.fillStyle = '#d97706';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            const plankWidth = canvas.width / 39;
+            for (let i = 0; i < 39; i++) {
+                ctx.fillStyle = (i % 2 === 0) ? 'rgba(0,0,0,0.04)' : 'rgba(255,255,255,0.04)';
+                ctx.fillRect(i * plankWidth, 0, plankWidth, canvas.height);
+                
+                ctx.strokeStyle = 'rgba(120, 53, 15, 0.25)';
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.moveTo(i * plankWidth, 0);
+                ctx.lineTo(i * plankWidth, canvas.height);
+                ctx.stroke();
+            }
+
+            const arrowY = canvas.height * 0.75;
+            for (let a = -3; a <= 3; a++) {
+                const cx = canvas.width / 2 + a * (plankWidth * 5);
+                ctx.beginPath();
+                ctx.moveTo(cx, arrowY);
+                ctx.lineTo(cx - 8, arrowY + 30);
+                ctx.lineTo(cx + 8, arrowY + 30);
+                ctx.closePath();
+                ctx.fillStyle = '#78350f';
+                ctx.fill();
+            }
+
+            const texture = new THREE.CanvasTexture(canvas);
+            texture.wrapS = THREE.RepeatWrapping;
+            texture.wrapT = THREE.RepeatWrapping;
+            return texture;
+        }
+
+        function createBowlingLaneEnvironment() {
+            const laneGeo = new THREE.BoxGeometry(LANE_WIDTH, 0.1, LANE_LENGTH);
+            const laneMat = new THREE.MeshStandardMaterial({
+                map: createWoodTexture(),
+                roughness: 0.15,
+                metalness: 0.05
+            });
+            const laneMesh = new THREE.Mesh(laneGeo, laneMat);
+            laneMesh.position.set(0, -0.05, -LANE_LENGTH / 2);
+            laneMesh.receiveShadow = true;
+            scene.add(laneMesh);
+
+            const laneShape = new CANNON.Box(new CANNON.Vec3(LANE_WIDTH / 2, 0.05, LANE_LENGTH / 2));
+            const laneBody = new CANNON.Body({ mass: 0, material: lanePhysicsMaterial });
+            laneBody.addShape(laneShape);
+            laneBody.position.set(0, -0.05, -LANE_LENGTH / 2);
+            world.addBody(laneBody);
+
+            const approachGeo = new THREE.BoxGeometry(LANE_WIDTH * 1.6, 0.1, 4);
+            const approachMat = new THREE.MeshStandardMaterial({ color: 0x92400e, roughness: 0.4 });
+            const approachMesh = new THREE.Mesh(approachGeo, approachMat);
+            approachMesh.position.set(0, -0.05, 2);
+            approachMesh.receiveShadow = true;
+            scene.add(approachMesh);
+
+            const foulLineGeo = new THREE.PlaneGeometry(LANE_WIDTH, 0.05);
+            const foulLineMat = new THREE.MeshBasicMaterial({ color: 0xef4444 });
+            const foulLine = new THREE.Mesh(foulLineGeo, foulLineMat);
+            foulLine.rotation.x = -Math.PI / 2;
+            foulLine.position.set(0, 0.001, 0);
+            scene.add(foulLine);
+
+            const gutterMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.5 });
+            const gutterGeo = new THREE.BoxGeometry(0.25, 0.08, LANE_LENGTH + 2);
+            
+            [-1, 1].forEach(side => {
+                const gutterMesh = new THREE.Mesh(gutterGeo, gutterMat);
+                gutterMesh.position.set(side * (LANE_WIDTH / 2 + 0.125), -0.07, -LANE_LENGTH / 2);
+                gutterMesh.receiveShadow = true;
+                scene.add(gutterMesh);
+
+                const gBody = new CANNON.Body({ mass: 0, material: lanePhysicsMaterial });
+                gBody.addShape(new CANNON.Box(new CANNON.Vec3(0.125, 0.04, (LANE_LENGTH + 2) / 2)));
+                gBody.position.set(side * (LANE_WIDTH / 2 + 0.125), -0.07, -LANE_LENGTH / 2);
+                world.addBody(gBody);
+            });
+
+            const trackMat = new THREE.MeshStandardMaterial({ color: 0x334155, metalness: 0.6, roughness: 0.3 });
+            const trackGeo = new THREE.BoxGeometry(0.15, 0.06, LANE_LENGTH + 2);
+            
+            [-RETURN_TRACK_X, RETURN_TRACK_X].forEach(xPos => {
+                const trackMesh = new THREE.Mesh(trackGeo, trackMat);
+                trackMesh.position.set(xPos, 0.03, -LANE_LENGTH / 2);
+                trackMesh.receiveShadow = true;
+                scene.add(trackMesh);
+            });
+
+            const backWallBody = new CANNON.Body({ mass: 0 });
+            backWallBody.addShape(new CANNON.Box(new CANNON.Vec3((LANE_WIDTH + 2) / 2, 2, 0.5)));
+            backWallBody.position.set(0, 1, -LANE_LENGTH - 1.2);
+            world.addBody(backWallBody);
+
+            [-1, 1].forEach(side => {
+                const wallBody = new CANNON.Body({ mass: 0 });
+                wallBody.addShape(new CANNON.Box(new CANNON.Vec3(0.1, 1, LANE_LENGTH / 2)));
+                wallBody.position.set(side * (LANE_WIDTH / 2 + 0.3), 1, -LANE_LENGTH / 2);
+                world.addBody(wallBody);
+            });
+        }
+
+        function createSweeperBar() {
+            const sweeperGeo = new THREE.BoxGeometry(LANE_WIDTH * 1.2, 0.25, 0.05);
+            const sweeperMat = new THREE.MeshStandardMaterial({ color: 0x334155, metalness: 0.8, roughness: 0.2 });
+            sweeperMesh = new THREE.Mesh(sweeperGeo, sweeperMat);
+            sweeperMesh.castShadow = true;
+            sweeperZ = -LANE_LENGTH - 0.5;
+            sweeperMesh.position.set(0, 0.12, sweeperZ);
+            scene.add(sweeperMesh);
+        }
+
+        function createBall() {
+            const ballRadius = 0.108;
+            const ballGeo = new THREE.SphereGeometry(ballRadius, 32, 32);
+
+            const ballMat = new THREE.MeshStandardMaterial({
+                color: 0x0284c7,
+                roughness: 0.1,
+                metalness: 0.3
+            });
+
+            ballMesh = new THREE.Mesh(ballGeo, ballMat);
+            ballMesh.castShadow = true;
+            scene.add(ballMesh);
+
+            const ballMass = 6.0;
+            const ballShape = new CANNON.Sphere(ballRadius);
+            ballBody = new CANNON.Body({ mass: ballMass, material: ballPhysicsMaterial });
+            ballBody.addShape(ballShape);
+            ballBody.linearDamping = 0.05;
+            ballBody.angularDamping = 0.05;
+            world.addBody(ballBody);
+
+            resetBallPosition();
+        }
+
+        function resetBallPosition() {
+            const posX = parseFloat(document.getElementById('slider-position').value) || 0;
+            ballBody.position.set(posX, 0.108, 0.3);
+            ballBody.velocity.set(0, 0, 0);
+            ballBody.angularVelocity.set(0, 0, 0);
+            ballBody.allowSleep = true;
+            ballBody.sleep();
+            
+            ballMesh.position.copy(ballBody.position);
+            ballMesh.quaternion.copy(ballBody.quaternion);
+
+            if (aimArrowMesh) {
+                aimArrowMesh.position.set(posX, 0.01, 0.2);
+            }
+
+            isBallReturning = false;
+            returnStage = 0;
+        }
+
+        function createAimArrow() {
+            const shape = new THREE.Shape();
+            shape.moveTo(0, 0);
+            shape.lineTo(-0.04, -0.2);
+            shape.lineTo(-0.015, -0.2);
+            shape.lineTo(-0.015, -1.2);
+            shape.lineTo(0.015, -1.2);
+            shape.lineTo(0.015, -0.2);
+            shape.lineTo(0.04, -0.2);
+            shape.closePath();
+
+            const geo = new THREE.ShapeGeometry(shape);
+            const mat = new THREE.MeshBasicMaterial({ color: 0xf59e0b, side: THREE.DoubleSide, transparent: true, opacity: 0.75 });
+            aimArrowMesh = new THREE.Mesh(geo, mat);
+            aimArrowMesh.rotation.x = Math.PI / 2;
+            aimArrowMesh.position.set(0, 0.01, 0.2);
+            scene.add(aimArrowMesh);
+        }
+
+        function createPinMesh() {
+            const halfH = PIN_HEIGHT / 2;
+            const points = [];
+            points.push(new THREE.Vector2(0, -halfH));                    
+            points.push(new THREE.Vector2(PIN_RADIUS * 0.7, -halfH));     
+            points.push(new THREE.Vector2(PIN_RADIUS * 0.95, -halfH + 0.03)); 
+            points.push(new THREE.Vector2(PIN_RADIUS * 0.65, -halfH + 0.10)); 
+            points.push(new THREE.Vector2(PIN_RADIUS * 0.35, -halfH + 0.20)); 
+            points.push(new THREE.Vector2(PIN_RADIUS * 0.52, -halfH + 0.28)); 
+            points.push(new THREE.Vector2(PIN_RADIUS * 0.62, -halfH + 0.33)); 
+            points.push(new THREE.Vector2(PIN_RADIUS * 0.45, -halfH + 0.36)); 
+            points.push(new THREE.Vector2(PIN_RADIUS * 0.22, -halfH + 0.375)); 
+            points.push(new THREE.Vector2(0, halfH));                       
+
+            const pinGeo = new THREE.LatheGeometry(points, 24);
+
+            const canvas = document.createElement('canvas');
+            canvas.width = 128;
+            canvas.height = 256;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, 128, 256);
+            
+            ctx.fillStyle = '#dc2626';
+            ctx.fillRect(0, 170, 128, 14);
+            ctx.fillRect(0, 192, 128, 10);
+
+            const texture = new THREE.CanvasTexture(canvas);
+            const pinMat = new THREE.MeshStandardMaterial({
+                map: texture,
+                roughness: 0.2,
+                metalness: 0.1
+            });
+
+            const mesh = new THREE.Mesh(pinGeo, pinMat);
+            mesh.castShadow = true;
+            mesh.receiveShadow = true;
+            return mesh;
+        }
+
+        function createPins(keepStanding = false) {
+            if (!keepStanding) {
+                pins.forEach(p => {
+                    scene.remove(p.mesh);
+                    world.remove(p.body);
+                });
+                pins = [];
+
+                const pinSpacing = 0.28;
+                const rowSpacing = 0.24;
+                const startZ = -LANE_LENGTH + 1.2;
+                let pinId = 1;
+
+                const rows = 4;
+                for (let r = 0; r < rows; r++) {
+                    const z = startZ - r * rowSpacing;
+                    const countInRow = r + 1;
+                    const startX = -((countInRow - 1) * pinSpacing) / 2;
+
+                    for (let c = 0; c < countInRow; c++) {
+                        const x = startX + c * pinSpacing;
+                        const initialPos = new THREE.Vector3(x, PIN_HEIGHT / 2, z);
+
+                        const mesh = createPinMesh();
+                        mesh.position.copy(initialPos);
+                        scene.add(mesh);
+
+                        const pinMass = 1.2;
+                        const pinShape = new CANNON.Cylinder(PIN_RADIUS * 0.7, PIN_RADIUS, PIN_HEIGHT, 12);
+                        const body = new CANNON.Body({
+                            mass: pinMass,
+                            material: pinPhysicsMaterial,
+                            linearDamping: 0.2,
+                            angularDamping: 0.2
+                        });
+                        
+                        const q = new CANNON.Quaternion();
+                        q.setFromAxisAngle(new CANNON.Vec3(1, 0, 0), -Math.PI / 2);
+                        body.addShape(pinShape, new CANNON.Vec3(0, -0.04, 0), q);
+                        
+                        body.position.set(x, PIN_HEIGHT / 2, z);
+                        world.addBody(body);
+
+                        body.addEventListener('collide', (e) => {
+                            const relativeVelocity = e.contact.getImpactVelocityAlongNormal();
+                            if (relativeVelocity > 0.8) {
+                                sound.playPinImpact(Math.min(1.0, relativeVelocity / 5));
+                            }
+                        });
+
+                        pins.push({ id: pinId++, mesh, body, initialPos, standing: true });
+                    }
+                }
+            } else {
+                pins = pins.filter(p => {
+                    if (!p.standing) {
+                        scene.remove(p.mesh);
+                        world.remove(p.body);
+                        return false;
+                    }
+                    return true;
+                });
+            }
+        }
+
+        function updateCameraPosition() {
+            if (cameraMode === 'overview') {
+                camera.position.set(0, 1.8, 1.6);
+                camera.lookAt(0, 0.2, -LANE_LENGTH / 2);
+            } else if (cameraMode === 'follow') {
+                const halfWayZ = -LANE_LENGTH / 2;
+                const ballZ = ballMesh.position.z;
+
+                if (ballZ > halfWayZ) {
+                    const targetZ = ballZ + 1.5;
+                    camera.position.set(0, 0.8, targetZ);
+                    camera.lookAt(0, 0.3, ballZ - 2);
+                } else {
+                    camera.position.set(1.4, 0.9, -LANE_LENGTH + 3);
+                    camera.lookAt(0, 0.3, -LANE_LENGTH + 0.5);
+                }
+            } else if (cameraMode === 'pins') {
+                camera.position.set(1.4, 0.9, -LANE_LENGTH + 3);
+                camera.lookAt(0, 0.3, -LANE_LENGTH + 0.5);
+            }
+        }
+
+        let isPowerOscillating = false;
+        let powerValue = 0;
+        let powerDirection = 1;
+        let powerAnimFrame = null;
+        let isBallRolling = false;
+        let spinHookValue = 0;
+
+        function setupUIEvents() {
+            document.getElementById('btn-mode-solo').addEventListener('click', () => {
+                gameMode = 'solo';
+                players = [{ name: 'Solo Player', scoreboard: new BowlingScoreboard() }];
+                activePlayerIndex = 0;
+                document.getElementById('turn-indicator-panel').classList.add('hidden');
+                closeModeSelectModal();
+            });
+
+            document.getElementById('btn-mode-local').addEventListener('click', () => {
+                gameMode = 'local';
+                players = [
+                    { name: 'Player 1', scoreboard: new BowlingScoreboard() },
+                    { name: 'Player 2', scoreboard: new BowlingScoreboard() }
+                ];
+                activePlayerIndex = 0;
+                document.getElementById('turn-indicator-panel').classList.remove('hidden');
+                closeModeSelectModal();
+            });
+
+            document.getElementById('btn-mode-online').addEventListener('click', () => {
+                document.getElementById('modal-mode-select').classList.add('opacity-0', 'pointer-events-none');
+                document.getElementById('modal-online-lobby').classList.remove('opacity-0', 'pointer-events-none');
+                initPeerJS();
+            });
+
+            document.getElementById('btn-cancel-online').addEventListener('click', () => {
+                document.getElementById('modal-online-lobby').classList.add('opacity-0', 'pointer-events-none');
+                document.getElementById('modal-mode-select').classList.remove('opacity-0', 'pointer-events-none');
+                if (peer) peer.destroy();
+            });
+
+            document.getElementById('btn-copy-id').addEventListener('click', () => {
+                const idText = document.getElementById('online-my-id').innerText;
+                navigator.clipboard.writeText(idText);
+                alert("Room ID copied to clipboard!");
+            });
+
+            document.getElementById('btn-connect-peer').addEventListener('click', () => {
+                const friendId = document.getElementById('input-peer-id').value.trim();
+                if (!friendId) return;
+                connectToPeer(friendId);
+            });
+
+            renderScoreboardGrid();
+
+            const posSlider = document.getElementById('slider-position');
+            const aimSlider = document.getElementById('slider-aim');
+            const spinSlider = document.getElementById('slider-spin');
+            const aimText = document.getElementById('aim-angle-text');
+
+            posSlider.addEventListener('input', (e) => {
+                if (isBallRolling) return;
+                const x = parseFloat(e.target.value);
+                ballBody.position.x = x;
+                ballMesh.position.x = x;
+                aimArrowMesh.position.x = x;
+            });
+
+            aimSlider.addEventListener('input', (e) => {
+                if (isBallRolling) return;
+                const angleDeg = parseFloat(e.target.value);
+                aimText.innerText = `${angleDeg > 0 ? '+' : ''}${angleDeg.toFixed(1)}°`;
+                aimArrowMesh.rotation.z = -angleDeg * (Math.PI / 180);
+            });
+
+            spinSlider.addEventListener('input', (e) => {
+                spinHookValue = parseFloat(e.target.value);
+            });
+
+            const stepAim = document.getElementById('step-aim');
+            const stepPower = document.getElementById('step-power');
+            const stepRolling = document.getElementById('step-rolling');
+
+            document.getElementById('btn-next-power').addEventListener('click', () => {
+                if (gameMode === 'online' && onlinePlayerId !== activePlayerIndex) {
+                    alert("Wait for your turn!");
+                    return;
+                }
+                stepAim.classList.add('hidden');
+                stepPower.classList.remove('hidden');
+                startPowerOscillation();
+            });
+
+            document.getElementById('btn-back-aim').addEventListener('click', () => {
+                stopPowerOscillation();
+                stepPower.classList.add('hidden');
+                stepAim.classList.remove('hidden');
+            });
+
+            document.getElementById('btn-release-ball').addEventListener('click', () => {
+                stopPowerOscillation();
+                stepPower.classList.add('hidden');
+                stepRolling.classList.remove('hidden');
+                executeThrow();
+            });
+
+            document.getElementById('btn-camera-toggle').addEventListener('click', () => {
+                if (cameraMode === 'overview') cameraMode = 'pins';
+                else if (cameraMode === 'pins') cameraMode = 'overview';
+                else cameraMode = 'overview';
+                updateCameraPosition();
+            });
+
+            document.getElementById('btn-audio-toggle').addEventListener('click', () => {
+                sound.muted = !sound.muted;
+                const icon = document.getElementById('audio-icon');
+                icon.className = sound.muted ? 'fa-solid fa-volume-xmark text-red-400' : 'fa-solid fa-volume-high text-amber-400';
+            });
+
+            document.getElementById('btn-restart').addEventListener('click', restartFullGame);
+            document.getElementById('btn-play-again').addEventListener('click', () => {
+                const modal = document.getElementById('modal-gameover');
+                modal.classList.remove('opacity-100');
+                modal.classList.add('opacity-0', 'pointer-events-none');
+                document.getElementById('modal-mode-select').classList.remove('opacity-0', 'pointer-events-none');
+            });
+        }
+
+        function closeModeSelectModal() {
+            document.getElementById('modal-mode-select').classList.add('opacity-0', 'pointer-events-none');
+            restartFullGame();
+        }
+
+        function initPeerJS() {
+            isOnlineHost = true;
+            onlinePlayerId = 0;
+            peer = new Peer();
+
+            peer.on('open', (id) => {
+                document.getElementById('online-my-id').innerText = id;
+                document.getElementById('online-status-msg').innerText = "Hosting room. Waiting for friend to join...";
+            });
+
+            peer.on('connection', (connection) => {
+                conn = connection;
+                setupPeerConnection();
+                document.getElementById('online-status-msg').innerText = "Friend connected! Starting game...";
+                setTimeout(() => {
+                    document.getElementById('modal-online-lobby').classList.add('opacity-0', 'pointer-events-none');
+                    gameMode = 'online';
+                    players = [
+                        { name: 'Host (P1)', scoreboard: new BowlingScoreboard() },
+                        { name: 'Guest (P2)', scoreboard: new BowlingScoreboard() }
+                    ];
+                    activePlayerIndex = 0;
+                    document.getElementById('turn-indicator-panel').classList.remove('hidden');
+                    restartFullGame();
+                }, 1000);
+            });
+        }
+
+        function connectToPeer(friendId) {
+            isOnlineHost = false;
+            onlinePlayerId = 1;
+            if (!peer) peer = new Peer();
+
+            peer.on('open', () => {
+                conn = peer.connect(friendId);
+                setupPeerConnection();
+                document.getElementById('online-status-msg').innerText = "Connecting to host...";
+            });
+        }
+
+        function setupPeerConnection() {
+            conn.on('open', () => {
+                if (!isOnlineHost) {
+                    document.getElementById('modal-online-lobby').classList.add('opacity-0', 'pointer-events-none');
+                    gameMode = 'online';
+                    players = [
+                        { name: 'Host (P1)', scoreboard: new BowlingScoreboard() },
+                        { name: 'Guest (P2)', scoreboard: new BowlingScoreboard() }
+                    ];
+                    activePlayerIndex = 0;
+                    document.getElementById('turn-indicator-panel').classList.remove('hidden');
+                    restartFullGame();
+                }
+            });
+
+            conn.on('data', (data) => {
+                if (data.type === 'THROW') {
+                    document.getElementById('slider-position').value = data.posX;
+                    document.getElementById('slider-aim').value = data.aim;
+                    document.getElementById('slider-spin').value = data.spin;
+                    powerValue = data.power;
+                    
+                    ballBody.position.x = data.posX;
+                    ballMesh.position.x = data.posX;
+                    aimArrowMesh.position.x = data.posX;
+
+                    executeThrow(true);
+                }
+            });
+        }
+
+        function startPowerOscillation() {
+            isPowerOscillating = true;
+            powerValue = 0;
+            powerDirection = 1.8;
+            const barFill = document.getElementById('power-bar-fill');
+            const percentText = document.getElementById('power-percent-text');
+
+            function animatePower() {
+                if (!isPowerOscillating) return;
+                powerValue += powerDirection;
+                if (powerValue >= 100) {
+                    powerValue = 100;
+                    powerDirection = -1.8;
+                } else if (powerValue <= 0) {
+                    powerValue = 0;
+                    powerDirection = 1.8;
+                }
+
+                barFill.style.width = `${powerValue}%`;
+                percentText.innerText = `${Math.round(powerValue)}%`;
+                powerAnimFrame = requestAnimationFrame(animatePower);
+            }
+            animatePower();
+        }
+
+        function stopPowerOscillation() {
+            isPowerOscillating = false;
+            if (powerAnimFrame) cancelAnimationFrame(powerAnimFrame);
+        }
+
+        function executeThrow(isRemote = false) {
+            isBallRolling = true;
+            aimArrowMesh.visible = false;
+            cameraMode = 'follow';
+
+            const aimAngleDeg = parseFloat(document.getElementById('slider-aim').value);
+            const aimRad = aimAngleDeg * (Math.PI / 180);
+
+            const speed = 7 + (powerValue / 100) * 8;
+            const vx = Math.sin(aimRad) * speed;
+            const vz = -Math.cos(aimRad) * speed;
+
+            ballBody.allowSleep = false;
+            ballBody.wakeUp();
+            ballBody.velocity.set(vx, 0, vz);
+
+            spinHookValue = parseFloat(document.getElementById('slider-spin').value);
+            ballBody.angularVelocity.set(0, 0, spinHookValue * 2);
+
+            currentRollSound = sound.playRoll();
+
+            if (gameMode === 'online' && !isRemote && conn && conn.open) {
+                conn.send({
+                    type: 'THROW',
+                    posX: ballBody.position.x,
+                    aim: aimAngleDeg,
+                    spin: spinHookValue,
+                    power: powerValue
+                });
+            }
+
+            checkRollCompletion();
+        }
+
+        function checkRollCompletion() {
+            let elapsedFrames = 0;
+            const checkInterval = setInterval(() => {
+                elapsedFrames++;
+                if (isBallRolling && Math.abs(spinHookValue) > 0 && ballBody.position.z < -2 && !isBallReturning) {
+                    ballBody.applyForce(new CANNON.Vec3(spinHookValue * -0.4, 0, 0), ballBody.position);
+                }
+
+                const hasPassedPins = ballBody.position.z < -16.0 && ballBody.velocity.length() < 1.5;
+                const isFar = ballBody.position.z < -LANE_LENGTH - 0.5;
+                const isTimeout = elapsedFrames > 140;
+
+                if ((hasPassedPins || isFar || isTimeout) && !isBallReturning) {
+                    clearInterval(checkInterval);
+                    if (currentRollSound && currentRollSound.gain) {
+                        currentRollSound.gain.gain.linearRampToValueAtTime(0.001, sound.ctx.currentTime + 0.3);
+                        setTimeout(() => { if (currentRollSound.noise) currentRollSound.noise.stop(); }, 300);
+                    }
+                    
+                    evaluateFallenPins();
+
+                    cameraMode = 'pins';
+                    updateCameraPosition();
+
+                    setTimeout(() => {
+                        startBallReturnSequence();
+                        startSweeperAnimation();
+                    }, 1000);
+                }
+            }, 100);
+        }
+
+        function startBallReturnSequence() {
+            isBallReturning = true;
+            returnStage = 1;
+            returnTargetX = ballBody.position.x >= 0 ? RETURN_TRACK_X : -RETURN_TRACK_X;
+
+            ballBody.velocity.set(0, 0, 0);
+            ballBody.angularVelocity.set(0, 0, 0);
+        }
+
+        function updateBallReturnAnimation() {
+            if (!isBallReturning) return;
+
+            if (returnStage === 1) {
+                const dx = returnTargetX - ballBody.position.x;
+                ballBody.position.x += dx * 0.12;
+                ballBody.position.y = 0.12;
+
+                if (Math.abs(dx) < 0.02) {
+                    ballBody.position.x = returnTargetX;
+                    returnStage = 2;
+                }
+            } else if (returnStage === 2) {
+                ballBody.position.z += 0.35;
+                ballMesh.rotation.x -= 0.15;
+
+                if (ballBody.position.z >= 0.3) {
+                    ballBody.position.z = 0.3;
+                    returnStage = 3;
+                    ballBody.allowSleep = true;
+                    ballBody.sleep();
+                }
+            }
+        }
+
+        function startSweeperAnimation() {
+            isSweeperAnimating = true;
+            sweeperZ = -LANE_LENGTH + 0.5;
+            sweeperMesh.position.z = sweeperZ;
+            sound.playMechanicalRack();
+        }
+
+        function updateSweeperAnimation() {
+            if (!isSweeperAnimating) return;
+
+            sweeperZ -= 0.15;
+            sweeperMesh.position.z = sweeperZ;
+
+            pins.forEach(p => {
+                if (!p.standing) {
+                    p.body.position.z = sweeperZ - 0.2;
+                    p.body.velocity.set(0, 0, 0);
+                    p.mesh.position.copy(p.body.position);
+                }
+            });
+
+            if (sweeperZ <= -LANE_LENGTH - 1.0) {
+                isSweeperAnimating = false;
+                sweeperMesh.position.z = -LANE_LENGTH - 0.5;
+
+                processRollResults();
+            }
+        }
+
+        function evaluateFallenPins() {
+            pins.forEach(p => {
+                if (p.standing) {
+                    const up = new THREE.Vector3(0, 1, 0);
+                    up.applyQuaternion(p.mesh.quaternion);
+                    const angleWithUp = up.angleTo(new THREE.Vector3(0, 1, 0));
+                    const distMoved = p.mesh.position.distanceTo(p.initialPos);
+
+                    if (angleWithUp > 0.15 || distMoved > 0.08 || p.mesh.position.y < 0.05) {
+                        p.standing = false;
+                    }
+                }
+            });
+        }
+
+        function processRollResults() {
+            let newlyFallen = pins.filter(p => !p.standing).length;
+
+            if (newlyFallen === 0 && Math.abs(ballBody.position.x) > LANE_WIDTH / 2) {
+                sound.playGutter();
+            }
+
+            const currentScoreboard = getActiveScoreboard();
+            currentScoreboard.recordRoll(newlyFallen);
+            renderScoreboardGrid();
+            triggerBannerFeedback(newlyFallen);
+
+            const allGameOver = players.every(p => p.scoreboard.isGameOver());
+
+            if (allGameOver) {
+                document.getElementById('step-rolling').classList.add('hidden');
+                showGameOverModal();
+            } else {
+                if (gameMode !== 'solo') {
+                    const currentFrame = currentScoreboard.frames[currentScoreboard.currentFrameIndex];
+                    if (currentFrame.isComplete || currentScoreboard.currentRollIndex === 0) {
+                        activePlayerIndex = (activePlayerIndex + 1) % players.length;
+                    }
+                }
+                prepareNextRoll();
+            }
+        }
+
+        function prepareNextRoll() {
+            const currentScoreboard = getActiveScoreboard();
+            const frame = currentScoreboard.frames[currentScoreboard.currentFrameIndex];
+            const keepStanding = !frame.isComplete && frame.rolls.length === 1;
+
+            createPins(keepStanding);
+            resetBallPosition();
+            cameraMode = 'overview';
+            updateCameraPosition();
+
+            aimArrowMesh.visible = true;
+            isBallRolling = false;
+            
+            document.getElementById('step-rolling').classList.add('hidden');
+            document.getElementById('step-aim').classList.remove('hidden');
+
+            const activeName = (gameMode === 'solo') ? 'SOLO PLAYER' : players[activePlayerIndex].name.toUpperCase();
+            document.getElementById('active-player-name').innerText = players[activePlayerIndex].name;
+            document.getElementById('game-status-text').innerText = 
+                `${activeName} • FRAME ${currentScoreboard.currentFrameIndex + 1} • ROLL ${currentScoreboard.currentRollIndex + 1}`;
+        }
+
+        function triggerBannerFeedback(fallenCount) {
+            const banner = document.getElementById('banner-container');
+            const title = document.getElementById('banner-title');
+            const subtitle = document.getElementById('banner-subtitle');
+            
+            const currentScoreboard = getActiveScoreboard();
+            const currentFrame = currentScoreboard.frames[currentScoreboard.currentFrameIndex < 9 ? currentScoreboard.currentFrameIndex : 9];
+            const rolls = currentFrame.rolls;
+
+            let show = false;
+            if (rolls.length === 1 && fallenCount === 10) {
+                title.innerText = "STRIKE! 🎳";
+                subtitle.innerText = "PERFECT SHOT!";
+                sound.playStrikeFanfare();
+                show = true;
+            } else if (rolls.length === 2 && (rolls[0] + rolls[1] === 10)) {
+                title.innerText = "SPARE! 🎯";
+                subtitle.innerText = "GREAT RECOVERY!";
+                sound.playPinImpact(1.0);
+                show = true;
+            } else if (fallenCount === 0) {
+                title.innerText = "GUTTER 🌊";
+                subtitle.innerText = "Better luck next roll!";
+                show = true;
+            }
+
+            if (show) {
+                banner.classList.remove('scale-0', 'opacity-0');
+                banner.classList.add('scale-100', 'opacity-100');
+                setTimeout(() => {
+                    banner.classList.remove('scale-100', 'opacity-100');
+                    banner.classList.add('scale-0', 'opacity-0');
+                }, 1600);
+            }
+        }
+
+        function renderScoreboardGrid() {
+            const container = document.getElementById('scoreboard-frames');
+            container.innerHTML = '';
+
+            const currentScoreboard = getActiveScoreboard();
+            document.getElementById('total-score-display').innerText = currentScoreboard.totalScore;
+
+            currentScoreboard.frames.forEach((frame, idx) => {
+                const isActive = idx === currentScoreboard.currentFrameIndex;
+                const card = document.createElement('div');
+                card.className = `rounded-xl p-1 flex flex-col justify-between border transition-all ${
+                    isActive ? 'bg-amber-500/20 border-amber-400/80 shadow-md scale-102' : 'bg-slate-900/50 border-slate-800'
+                }`;
+
+                const frameHeader = `<div class="text-[9px] font-bold text-center text-slate-400 uppercase">F${idx + 1}</div>`;
+
+                let rollsHtml = '';
+                if (idx < 9) {
+                    const r1 = frame.rolls[0] !== undefined ? (frame.rolls[0] === 10 ? 'X' : frame.rolls[0]) : '';
+                    const r2 = frame.rolls[1] !== undefined ? (frame.rolls[0] + frame.rolls[1] === 10 ? '/' : frame.rolls[1]) : '';
+                    rollsHtml = `
+                        <div class="flex border border-slate-700/60 rounded overflow-hidden text-[11px] font-mono font-bold text-center my-0.5 bg-slate-950/40">
+                            <span class="w-1/2 py-0.5 border-r border-slate-700/60 text-slate-200">${r1}</span>
+                            <span class="w-1/2 py-0.5 text-amber-400">${r2}</span>
+                        </div>`;
+                } else {
+                    const formatR = (r, prev) => {
+                        if (r === 10) return 'X';
+                        if (prev !== undefined && prev < 10 && prev + r === 10) return '/';
+                        return r;
+                    };
+                    const r1 = frame.rolls[0] !== undefined ? formatR(frame.rolls[0]) : '';
+                    const r2 = frame.rolls[1] !== undefined ? formatR(frame.rolls[1], frame.rolls[0]) : '';
+                    const r3 = frame.rolls[2] !== undefined ? formatR(frame.rolls[2], frame.rolls[1]) : '';
+
+                    rollsHtml = `
+                        <div class="flex border border-slate-700/60 rounded overflow-hidden text-[10px] font-mono font-bold text-center my-0.5 bg-slate-950/40">
+                            <span class="w-1/3 py-0.5 border-r border-slate-700/60 text-slate-200">${r1}</span>
+                            <span class="w-1/3 py-0.5 border-r border-slate-700/60 text-amber-400">${r2}</span>
+                            <span class="w-1/3 py-0.5 text-amber-400">${r3}</span>
+                        </div>`;
+                }
+
+                const scoreHtml = `<div class="scoreboard-font text-lg text-center leading-none font-bold text-amber-300">
+                    ${frame.score !== null ? frame.score : ''}
+                </div>`;
+
+                card.innerHTML = frameHeader + rollsHtml + scoreHtml;
+                container.appendChild(card);
+            });
+        }
+
+        function showGameOverModal() {
+            let scoresHtml = '';
+            let winningPlayer = players[0];
+
+            players.forEach(p => {
+                if (p.scoreboard.totalScore > winningPlayer.scoreboard.totalScore) {
+                    winningPlayer = p;
+                }
+                scoresHtml += `<div class="flex justify-between font-bold"><span>${p.name}:</span> <span class="text-amber-400 scoreboard-font text-xl">${p.scoreboard.totalScore} pts</span></div>`;
+            });
+
+            document.getElementById('gameover-winner-text').innerText = gameMode === 'solo' 
+                ? `Final Score: ${players[0].scoreboard.totalScore}` 
+                : `Winner: ${winningPlayer.name}! 🎉`;
+
+            document.getElementById('gameover-scores-list').innerHTML = scoresHtml;
+
+            const modal = document.getElementById('modal-gameover');
+            modal.classList.remove('opacity-0', 'pointer-events-none');
+            modal.classList.add('opacity-100');
+        }
+
+        function restartFullGame() {
+            players.forEach(p => p.scoreboard.reset());
+            activePlayerIndex = 0;
+            renderScoreboardGrid();
+            createPins(false);
+            resetBallPosition();
+            
+            isBallRolling = false;
+            aimArrowMesh.visible = true;
+            cameraMode = 'overview';
+            updateCameraPosition();
+
+            document.getElementById('step-rolling').classList.add('hidden');
+            document.getElementById('step-power').classList.add('hidden');
+            document.getElementById('step-aim').classList.remove('hidden');
+
+            const activeName = (gameMode === 'solo') ? 'SOLO PLAYER' : players[activePlayerIndex].name.toUpperCase();
+            document.getElementById('active-player-name').innerText = players[activePlayerIndex].name;
+            document.getElementById('game-status-text').innerText = `${activeName} • FRAME 1 • ROLL 1`;
+        }
+
+        const fixedTimeStep = 1 / 60;
+        function animate() {
+            requestAnimationFrame(animate);
+
+            if (!isBallReturning) {
+                world.step(fixedTimeStep);
+            } else {
+                updateBallReturnAnimation();
+            }
+
+            if (isSweeperAnimating) {
+                updateSweeperAnimation();
+            }
+
+            ballMesh.position.copy(ballBody.position);
+            ballMesh.quaternion.copy(ballBody.quaternion);
+
+            pins.forEach(p => {
+                p.mesh.position.copy(p.body.position);
+                p.mesh.quaternion.copy(p.body.quaternion);
+            });
+
+            if (cameraMode === 'follow' && isBallRolling) {
+                updateCameraPosition();
+            }
+
+            renderer.render(scene, camera);
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        window.onload = () => {
+            initEngine();
+            setupUIEvents();
+            animate();
+        };
+    </script>
+</body>
+</html>
