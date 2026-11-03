@@ -4,6 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>3D 10-Pin Bowling - Multi-Mode</title>
+    
+    <!-- Browser Favicon Icon -->
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🎳</text></svg>">
+
     <!-- Tailwind CSS for modern UI overlay -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- FontAwesome Icons -->
@@ -57,7 +61,7 @@
         }
         /* Safe area bottom padding for mobile navigation bars */
         .safe-bottom-container {
-            padding-bottom: max(1.5rem, env(safe-area-inset-bottom));
+            padding-bottom: max(2.5rem, env(safe-area-inset-bottom));
         }
         /* Custom scrollbar for scoreboard */
         ::-webkit-scrollbar {
@@ -134,7 +138,7 @@
     </div>
 
     <!-- UI Overlay Layer -->
-    <div class="relative z-10 flex flex-col justify-between h-screen p-3 pt-3 safe-bottom-container pointer-events-none box-border">
+    <div class="relative z-10 flex flex-col justify-between h-[100dvh] p-3 pt-3 pb-8 safe-bottom-container pointer-events-none box-border">
         
         <!-- Header & Scoreboard Section -->
         <header class="w-full max-w-6xl mx-auto pointer-events-auto">
@@ -1610,3 +1614,4 @@
     </script>
 </body>
 </html>
+Bazzarn
